@@ -11,7 +11,11 @@
 <h4>VTF Spray Converter for Team Fortress 2</h4>
 <div id = "main">
 <br />
-<input type="file" id="files" name="files[]" accept="image/*,.tga,video/*" onchange="handleFileSelect(event)" multiple/>
+<div id="dropZone" class="drop-zone">
+  <p>Drag & drop images here, click to browse files, or paste from clipboard</p>
+  <input type="text" id="imageUrlInput" placeholder="Or paste an image URL here and press Enter" />
+  <input type="file" id="files" name="files[]" accept="image/*,.tga,video/*" onchange="handleFileSelect(event)" multiple style="display: none;"/>
+</div>
 <br /><br />
 Works best with same size images (with transparency or not).<br />
 Smaller images will be centered.<br />
@@ -125,7 +129,7 @@ Preview:
 	<canvas id="tempCanvas"></canvas>
 	<div id="frames"></div>
 </div>
-<input type="file" id="files0" name="files[]" accept="image/*,.tga,video/*" onchange="changeMipmap(event,0)" disabled multiple/>
+<input type="file" id="files0" name="files[]" accept="image/*,.tga,video/*" onchange="changeMipmap(event,0)" disabled multiple style="display: none;"/>
 <div id="mipmaps" style="display: none"></div>
 <br /><br />
 Changelog:<br /><br />

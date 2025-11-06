@@ -33,6 +33,132 @@ var convertWorkersLeft = 0;
 var timestart = 0;
 var convertWorkers = [];
 
+// New functionality for drag and drop, copy/paste, and image URL handling
+document.addEventListener('DOMContentLoaded', function() {
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('files');
+    const imageUrlInput = document.getElementById('imageUrlInput');
+
+    dropZone.addEventListener('click', function(e) {
+        if (e.target !== imageUrlInput) {
+            fileInput.click();
+        }
+    });
+
+    // Combined drag event handlers
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (eventName === 'dragenter' || eventName === 'dragover') {
+                dropZone.classList.add('drag-over');
+            } else if (eventName === 'dragleave' || eventName === 'drop') {
+                dropZone.classList.remove('drag-over');
+            }
+        }, false);
+    });
+
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const dt = e.dataTransfer;
+        const files = dt.files;
+
+        if (files.length) {
+            handleFiles(files);
+        } else {
+            const text = dt.getData('text/plain');
+            if (text && isValidImageUrl(text)) {
+                loadImageFromUrl(text);
+            }
+        }
+    });
+
+    document.addEventListener('paste', function(e) {
+        for (let i = 0; i < e.clipboardData.items.length; i++) {
+            const item = e.clipboardData.items[i];
+
+            if (item.type.indexOf('image') !== -1) {
+                e.preventDefault();
+                const blob = item.getAsFile();
+                if (blob) {
+                    handleFiles([blob]);
+                }
+                return;
+            }
+        }
+
+        const pastedData = e.clipboardData.getData('text/plain');
+        if (pastedData && isValidImageUrl(pastedData)) {
+            e.preventDefault();
+            loadImageFromUrl(pastedData);
+        }
+    });
+
+    imageUrlInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const url = this.value.trim();
+            if (url && isValidImageUrl(url)) {
+                loadImageFromUrl(url);
+                this.value = ''; // Clear the input
+            }
+        }
+    });
+
+    function isValidImageUrl(url) {
+        try {
+            const parsedUrl = new URL(url);
+            if (/\.(jpeg|jpg|gif|png|bmp|webp|svg|tga|tiff|tif)$/i.test(parsedUrl.pathname)) {
+                return true;
+            }
+            return true;
+        } catch (e) {
+            return /\.(jpeg|jpg|gif|png|bmp|webp|svg|tga|tiff|tif)$/i.test(url);
+        }
+    }
+
+    function loadImageFromUrl(url) {
+        const img = new Image();
+        img.crossOrigin = 'Anonymous';
+
+        img.onload = function() {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+
+            canvas.toBlob(function(blob) {
+                if (blob) {
+                    const file = new File([blob], 'pasted-image.jpg', { type: blob.type });
+                    handleFiles([file]);
+                }
+            }, 'image/jpeg', 0.9);
+        };
+
+        img.onerror = function() {
+            alert('Failed to load image from URL: ' + url +
+                  '\n\nThis might be due to CORS restrictions or the URL not being a direct image.');
+        };
+
+        img.src = url;
+    }
+
+    function handleFiles(files) {
+        const dt = new DataTransfer();
+        for (let i = 0; i < files.length; i++) {
+            dt.items.add(files[i]);
+        }
+
+        fileInput.files = dt.files;
+
+        const event = new Event('change', { bubbles: true });
+        fileInput.dispatchEvent(event);
+    }
+});
+
 setResolution();
 function setResolution() {
 	setOutputType(document.getElementById('format'));

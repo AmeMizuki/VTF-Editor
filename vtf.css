@@ -88,3 +88,45 @@ body {
 }
 #videoImporter{
 }
+
+.drop-zone {
+  border: 2px dashed #888;
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  margin: 20px auto;
+  background-color: #dcdcdc;
+  transition: background-color 0.3s, border-color 0.3s;
+  cursor: pointer;
+  max-width: 800px;
+  width: 80%;
+}
+
+.drop-zone:hover {
+  background-color: #cccccc;
+}
+
+.drop-zone.drag-over {
+  background-color: #c4c4c4;
+  border-color: #a4a4a4;
+}
+
+.drop-zone p {
+  margin: 10px 0;
+  color: #333;
+}
+
+#imageUrlInput {
+  width: 70%;
+  padding: 8px;
+  margin: 10px 0;
+  border: 1px solid #a4a4a4;
+  border-radius: 4px;
+  background-color: #f0f0f0;
+  color: #333;
+}
+
+/* Hide additional mipmap file inputs to focus on main upload functionality */
+#mipmaps input[type="file"] {
+  display: none !important;
+}

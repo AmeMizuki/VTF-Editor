@@ -226,7 +226,7 @@ function setResolution() {
 function check() {
 	if (getEstFileSize(false)/1024 >= 512 && getEstFileSize(false)/1024 < 513){
 		shortened = true;
-		document.getElementById("resolutionNotice").innerHTML = "Changed to "+(width-4)+"x"+height;
+		document.getElementById("resolutionNotice").innerHTML = t('changedTo',{w:(width-4),h:height});
 		document.getElementById("resolutionNotice").style.visibility = "visible";
 	}
 	else if (shortened && getEstFileSize(false)/1024 < ((width - 4) / width) * 512 - 1){
@@ -272,11 +272,88 @@ setInterval(function(){
 	}
 	var filesize = getEstFileSize(true)/1024;
 	if (filesize < 512)
-		document.getElementById('filesizee').innerHTML = "Estimated file size: <span style='color:green'>"+filesize+"</span> [KB]";
+		document.getElementById('filesizee').innerHTML = t('estFileSize')+": <span style='color:var(--good)'>"+filesize+"</span> [KB]";
 	else
-		document.getElementById('filesizee').innerHTML = "Estimated file size: <span style='color:red'>"+filesize+"</span> [KB]";
+		document.getElementById('filesizee').innerHTML = t('estFileSize')+": <span style='color:var(--coral)'>"+filesize+"</span> [KB]";
 
 }, 200);
+
+async function loadFromUrl() {
+	var input = document.getElementById('imageUrl');
+	if (!input) return;
+	var url = input.value.trim();
+	var status = document.getElementById('urlStatus');
+	if (!url) { setUrlStatus(status, '', ''); return; }
+	setUrlStatus(status, 'loading', t('fetching'));
+	try {
+		var blob = await fetchRemoteBlob(url);
+		var type = await sniffMediaType(blob, url);
+		if (!type) throw new Error(t('notSupported'));
+		var file = new File([blob], guessFileName(url, type), { type: type });
+		setUrlStatus(status, '', '');
+		handleFileSelect({ target: { files: [file] } });
+	} catch (err) {
+		setUrlStatus(status, 'error', t('failed') + ': ' + (err && err.message ? err.message : err));
+	}
+}
+
+function setUrlStatus(el, cls, text) {
+	if (!el) return;
+	el.className = 'url-status' + (cls ? ' ' + cls : '');
+	el.textContent = text;
+}
+
+
+async function fetchRemoteBlob(url) {
+	var sources = [
+		url,
+		'https://images.weserv.nl/?n=-1&url=' + encodeURIComponent(url.replace(/^https?:\/\//, '')),
+		'https://corsproxy.io/?url=' + encodeURIComponent(url),
+		'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
+		'https://api.codetabs.com/v1/proxy/?quest=' + encodeURIComponent(url)
+	];
+	var lastErr;
+	for (var i = 0; i < sources.length; i++) {
+		try {
+			var resp = await fetch(sources[i], { mode: 'cors', credentials: 'omit', redirect: 'follow' });
+			if (!resp.ok) { lastErr = new Error('HTTP ' + resp.status); continue; }
+			var blob = await resp.blob();
+			if (blob && blob.size > 0) return blob;
+			lastErr = new Error('empty response');
+		} catch (e) { lastErr = e; }
+	}
+	throw lastErr || new Error(t('corsBlocked'));
+}
+
+
+async function sniffMediaType(blob, url) {
+	var head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+	function at(off, sig) {
+		for (var i = 0; i < sig.length; i++) if (head[off + i] !== sig[i]) return false;
+		return true;
+	}
+	if (at(0, [0x47, 0x49, 0x46, 0x38])) return 'image/gif';
+	if (at(0, [0x89, 0x50, 0x4E, 0x47])) return 'image/png';
+	if (at(0, [0xFF, 0xD8, 0xFF])) return 'image/jpeg';
+	if (at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50])) return 'image/webp';
+	if (at(4, [0x66, 0x74, 0x79, 0x70])) return 'video/mp4';
+	if (at(0, [0x1A, 0x45, 0xDF, 0xA3])) return 'video/webm';
+	if (blob.type && (/^image\//.test(blob.type) || /^video\//.test(blob.type))) return blob.type;
+	var ext = (url.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i) || [])[1];
+	var map = {
+		tga: 'image/x-tga', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+		gif: 'image/gif', webp: 'image/webp', bmp: 'image/bmp', mp4: 'video/mp4', webm: 'video/webm'
+	};
+	return map[ext ? ext.toLowerCase() : ''] || '';
+}
+
+function guessFileName(url, type) {
+	var base = (url.split(/[?#]/)[0].split('/').pop() || 'spray');
+	if (!/\.[a-z0-9]+$/i.test(base)) {
+		base += '.' + type.split('/')[1].replace('x-', '').replace('jpeg', 'jpg');
+	}
+	return base;
+}
 
 function handleFileSelect(evt) {
 	var files = evt.target.files; // FileList object
@@ -448,7 +525,7 @@ function generateCanvas(ccanvas, cwidth, cheight) {
 			canvas.getContext('2d').drawImage(fimg, cwidth/2-fimg.width * scale /2+ Math.floor(frame * height / 32767)*cwidth, cheight/2-fimg.height * scale/2 + cheight * (frame % getFrameRows()), fimg.width * scale, fimg.height * scale);
 		}
 	}
-	document.getElementById('filesizee').innerHTML = "Estimated file size: "+(getEstFileSize()/1024);
+	document.getElementById('filesizee').innerHTML = t('estFileSize')+": "+(getEstFileSize()/1024);
 }
 
 function createCanvas() { // put centered image on canvas
@@ -892,8 +969,7 @@ function handleGifLoad(gif, cframes,options) {
 				imagesLoaded++;
 				frameCount++;
 				if (!autores && !cancelPressed && getEstFileSize() / 1024 > 513){
-					if(window.confirm("The remaining "+(gif.get_frames().length - j)+
-					" frames are skipped as they would exceed the frame limit. Press Cancel to preserve all frames")){
+					if(window.confirm(t('confirmFrames'))){
 						imagesLoaded--;
 						frameCount--;
 						return;
@@ -956,7 +1032,7 @@ function handleVideoLoad(video, cframes, options, onprogress) {
 			frameCount++;
 			
 			if (!autores && !cancelPressed && getEstFileSize() / 1024 > 513){
-				if(window.confirm("The remaining frames are skipped as they would exceed the frame limit. Press Cancel to preserve all frames")){
+				if(window.confirm(t('confirmFrames'))){
 					imagesLoaded--;
 					frameCount--;
 					framesc=frameCount;
@@ -992,19 +1068,18 @@ function handleClipImport(length, usetime, clipAccept) {
 	document.getElementById("startTimeIn").value=0;
 	document.getElementById("endTimeIn").value=length;
 	document.getElementById("videoImporterProg").innerText="";
+	document.getElementById("allFramesLb").innerText=t('importAll');
 	if (usetime){
-		document.getElementById("startTimeLb").innerText="Start time in seconds:"
-		document.getElementById("endTimeLb").innerText="End time in seconds:"
+		document.getElementById("startTimeLb").innerText=t('startTime');
+		document.getElementById("endTimeLb").innerText=t('endTime');
 		document.getElementById("videoImporterNotice").style.display="block";
-		document.getElementById("allFramesIn").style.display="none";
-		document.getElementById("allFramesLb").style.display="none";
+		document.getElementById("allFramesIn").parentElement.style.display="none";
 	}
 	else{
-		document.getElementById("startTimeLb").innerText="Start frame:"
-		document.getElementById("endTimeLb").innerText="End frame:"
+		document.getElementById("startTimeLb").innerText=t('startFrame');
+		document.getElementById("endTimeLb").innerText=t('endFrame');
 		document.getElementById("videoImporterNotice").style.display="none";
-		document.getElementById("allFramesIn").style.display="inline";
-		document.getElementById("allFramesLb").style.display="inline";
+		document.getElementById("allFramesIn").parentElement.style.display="flex";
 	}
 	document.getElementById("fpsIn").value=1;
 	onImportClipAccept = clipAccept;
@@ -1022,7 +1097,7 @@ function clipImport() {
 }
 
 function closeClipImport(){
-	document.getElementById("main").style.display="block";
+	document.getElementById("main").style.display="grid";
 	document.getElementById("videoImporter").style.display="none";
 }
 
@@ -1092,19 +1167,38 @@ function writeInt(data, pos, value, bytes){
 }
 
 // Function to download data to a file
-function download(data, extension) {
+async function download(data, extension) {
     var nameField = document.getElementById("outputFilename");
     if (!nameField.validity.valid) {
-      alert("Filename contains invalid characters");
+      alert(t("invalidFilename"));
       return;
     }
-    var a = document.createElement("a"),
-        file = new Blob([data], {type: "application/octet-stream"}),
+    var file = new Blob([data], {type: "application/octet-stream"}),
         name = nameField.value || "spray",
         filename = name + "." + extension;
-    if (window.navigator.msSaveOrOpenBlob) // IE10+
+
+    // Modern browsers: ask the user where to save (real "Save As" dialog).
+    if (window.showSaveFilePicker) {
+        try {
+            var accept = {}; accept["application/octet-stream"] = ["." + extension];
+            var handle = await window.showSaveFilePicker({
+                suggestedName: filename,
+                types: [{ description: extension.toUpperCase() + " file", accept: accept }]
+            });
+            var writable = await handle.createWritable();
+            await writable.write(file);
+            await writable.close();
+            return;
+        } catch (err) {
+            if (err && err.name === "AbortError") return; // user cancelled
+            // otherwise fall through to the classic download
+        }
+    }
+
+    if (window.navigator.msSaveOrOpenBlob) { // IE10+
         window.navigator.msSaveOrOpenBlob(file, filename);
-    else { // Others
+    } else { // Others
+        var a = document.createElement("a");
         var url = URL.createObjectURL(file);
         a.href = url;
         a.download = filename;
@@ -1112,8 +1206,8 @@ function download(data, extension) {
         a.click();
         setTimeout(function() {
             document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);  
-        }, 0); 
+            window.URL.revokeObjectURL(url);
+        }, 0);
     }
 }
 

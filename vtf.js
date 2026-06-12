@@ -39,44 +39,49 @@ document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('files');
     const imageUrlInput = document.getElementById('imageUrlInput');
 
-    dropZone.addEventListener('click', function(e) {
-        if (e.target !== imageUrlInput) {
-            fileInput.click();
-        }
-    });
+    if (dropZone) {
+        dropZone.addEventListener('click', function(e) {
+            if (imageUrlInput && e.target !== imageUrlInput) {
+                fileInput.click();
+            } else if (!imageUrlInput) {
+                fileInput.click();
+            }
+        });
 
-    // Combined drag event handlers
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropZone.addEventListener(eventName, function(e) {
+        // Combined drag event handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                if (eventName === 'dragenter' || eventName === 'dragover') {
+                    dropZone.classList.add('drag-over');
+                } else if (eventName === 'dragleave' || eventName === 'drop') {
+                    dropZone.classList.remove('drag-over');
+                }
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', function(e) {
             e.preventDefault();
             e.stopPropagation();
 
-            if (eventName === 'dragenter' || eventName === 'dragover') {
-                dropZone.classList.add('drag-over');
-            } else if (eventName === 'dragleave' || eventName === 'drop') {
-                dropZone.classList.remove('drag-over');
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length) {
+                handleFiles(files);
+            } else {
+                const text = dt.getData('text/plain');
+                if (text && isValidImageUrl(text)) {
+                    loadImageFromUrl(text);
+                }
             }
-        }, false);
-    });
-
-    dropZone.addEventListener('drop', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const dt = e.dataTransfer;
-        const files = dt.files;
-
-        if (files.length) {
-            handleFiles(files);
-        } else {
-            const text = dt.getData('text/plain');
-            if (text && isValidImageUrl(text)) {
-                loadImageFromUrl(text);
-            }
-        }
-    });
+        });
+    }
 
     document.addEventListener('paste', function(e) {
+        // Handle image pasting
         for (let i = 0; i < e.clipboardData.items.length; i++) {
             const item = e.clipboardData.items[i];
 
@@ -84,28 +89,43 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.preventDefault();
                 const blob = item.getAsFile();
                 if (blob) {
-                    handleFiles([blob]);
+                    const file = new File([blob], 'pasted-image.png', { type: blob.type });
+                    handleFileSelect({ target: { files: [file] } });
                 }
                 return;
             }
         }
 
+        // Handle URL pasting
         const pastedData = e.clipboardData.getData('text/plain');
         if (pastedData && isValidImageUrl(pastedData)) {
-            e.preventDefault();
-            loadImageFromUrl(pastedData);
-        }
-    });
-
-    imageUrlInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            const url = this.value.trim();
-            if (url && isValidImageUrl(url)) {
-                loadImageFromUrl(url);
-                this.value = ''; // Clear the input
+            const activeElement = document.activeElement;
+            const isOtherInput = activeElement && 
+                                 (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') && 
+                                 activeElement.id !== 'imageUrl';
+            
+            if (!isOtherInput) {
+                e.preventDefault();
+                const imageUrlField = document.getElementById('imageUrl');
+                if (imageUrlField) {
+                    imageUrlField.value = pastedData;
+                    loadFromUrl();
+                }
             }
         }
     });
+
+    if (imageUrlInput) {
+        imageUrlInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                const url = this.value.trim();
+                if (url && isValidImageUrl(url)) {
+                    loadImageFromUrl(url);
+                    this.value = ''; // Clear the input
+                }
+            }
+        });
+    }
 
     function isValidImageUrl(url) {
         try {
@@ -147,6 +167,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function handleFiles(files) {
+        if (!fileInput) return;
         const dt = new DataTransfer();
         for (let i = 0; i < files.length; i++) {
             dt.items.add(files[i]);

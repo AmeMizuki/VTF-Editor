@@ -33,151 +33,89 @@ var convertWorkersLeft = 0;
 var timestart = 0;
 var convertWorkers = [];
 
-// New functionality for drag and drop, copy/paste, and image URL handling
+// Drag-and-drop, paste, and image-URL handling for the Source panel.
+function isValidImageUrl(url) {
+	try {
+		new URL(url);
+		return true;
+	} catch (e) {
+		return /\.(jpeg|jpg|gif|png|bmp|webp|svg|tga|tiff|tif)$/i.test(url);
+	}
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    const dropZone = document.getElementById('dropZone');
-    const fileInput = document.getElementById('files');
-    const imageUrlInput = document.getElementById('imageUrlInput');
+	var dropZone = document.getElementById('dropZone');
+	var filesInput = document.getElementById('files');
+	var dropZoneFilename = document.getElementById('dropZoneFilename');
 
-    if (dropZone) {
-        dropZone.addEventListener('click', function(e) {
-            if (imageUrlInput && e.target !== imageUrlInput) {
-                fileInput.click();
-            } else if (!imageUrlInput) {
-                fileInput.click();
-            }
-        });
+	if (dropZone && filesInput) {
+		filesInput.addEventListener('change', function() {
+			dropZoneFilename.textContent = this.files[0] ? this.files[0].name : '';
+		});
 
-        // Combined drag event handlers
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropZone.addEventListener(eventName, function(e) {
-                e.preventDefault();
-                e.stopPropagation();
+		['dragenter', 'dragover'].forEach(function(evt) {
+			dropZone.addEventListener(evt, function() { dropZone.classList.add('drag-over'); });
+		});
+		['dragleave', 'drop'].forEach(function(evt) {
+			dropZone.addEventListener(evt, function() { dropZone.classList.remove('drag-over'); });
+		});
 
-                if (eventName === 'dragenter' || eventName === 'dragover') {
-                    dropZone.classList.add('drag-over');
-                } else if (eventName === 'dragleave' || eventName === 'drop') {
-                    dropZone.classList.remove('drag-over');
-                }
-            }, false);
-        });
+		// A file dropped directly onto the <input type="file"> is handled
+		// natively by the browser (fills .files and fires change) - only
+		// handle the case of dropping a URL/text (no files) ourselves.
+		dropZone.addEventListener('drop', function(e) {
+			if (e.dataTransfer.files.length) return;
+			var text = e.dataTransfer.getData('text/plain');
+			if (text && isValidImageUrl(text)) {
+				e.preventDefault();
+				var imageUrlField = document.getElementById('imageUrl');
+				imageUrlField.value = text;
+				loadFromUrl();
+			}
+		});
 
-        dropZone.addEventListener('drop', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+		// Safety net: without this, dropping a file anywhere outside the
+		// zone navigates the tab to the raw file and discards in-progress
+		// settings, since the browser's default action for an unhandled
+		// drop is to open it.
+		document.addEventListener('dragover', function(e) { e.preventDefault(); });
+		document.addEventListener('drop', function(e) { if (e.target !== filesInput) e.preventDefault(); });
+	}
 
-            const dt = e.dataTransfer;
-            const files = dt.files;
+	document.addEventListener('paste', function(e) {
+		// Handle image pasting
+		for (let i = 0; i < e.clipboardData.items.length; i++) {
+			const item = e.clipboardData.items[i];
 
-            if (files.length) {
-                handleFiles(files);
-            } else {
-                const text = dt.getData('text/plain');
-                if (text && isValidImageUrl(text)) {
-                    loadImageFromUrl(text);
-                }
-            }
-        });
-    }
+			if (item.type.indexOf('image') !== -1) {
+				e.preventDefault();
+				const blob = item.getAsFile();
+				if (blob) {
+					const file = new File([blob], 'pasted-image.png', { type: blob.type });
+					handleFileSelect({ target: { files: [file] } });
+				}
+				return;
+			}
+		}
 
-    document.addEventListener('paste', function(e) {
-        // Handle image pasting
-        for (let i = 0; i < e.clipboardData.items.length; i++) {
-            const item = e.clipboardData.items[i];
+		// Handle URL pasting
+		const pastedData = e.clipboardData.getData('text/plain');
+		if (pastedData && isValidImageUrl(pastedData)) {
+			const activeElement = document.activeElement;
+			const isOtherInput = activeElement &&
+								 (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') &&
+								 activeElement.id !== 'imageUrl';
 
-            if (item.type.indexOf('image') !== -1) {
-                e.preventDefault();
-                const blob = item.getAsFile();
-                if (blob) {
-                    const file = new File([blob], 'pasted-image.png', { type: blob.type });
-                    handleFileSelect({ target: { files: [file] } });
-                }
-                return;
-            }
-        }
-
-        // Handle URL pasting
-        const pastedData = e.clipboardData.getData('text/plain');
-        if (pastedData && isValidImageUrl(pastedData)) {
-            const activeElement = document.activeElement;
-            const isOtherInput = activeElement && 
-                                 (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA') && 
-                                 activeElement.id !== 'imageUrl';
-            
-            if (!isOtherInput) {
-                e.preventDefault();
-                const imageUrlField = document.getElementById('imageUrl');
-                if (imageUrlField) {
-                    imageUrlField.value = pastedData;
-                    loadFromUrl();
-                }
-            }
-        }
-    });
-
-    if (imageUrlInput) {
-        imageUrlInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                const url = this.value.trim();
-                if (url && isValidImageUrl(url)) {
-                    loadImageFromUrl(url);
-                    this.value = ''; // Clear the input
-                }
-            }
-        });
-    }
-
-    function isValidImageUrl(url) {
-        try {
-            const parsedUrl = new URL(url);
-            if (/\.(jpeg|jpg|gif|png|bmp|webp|svg|tga|tiff|tif)$/i.test(parsedUrl.pathname)) {
-                return true;
-            }
-            return true;
-        } catch (e) {
-            return /\.(jpeg|jpg|gif|png|bmp|webp|svg|tga|tiff|tif)$/i.test(url);
-        }
-    }
-
-    function loadImageFromUrl(url) {
-        const img = new Image();
-        img.crossOrigin = 'Anonymous';
-
-        img.onload = function() {
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width;
-            canvas.height = img.height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-
-            canvas.toBlob(function(blob) {
-                if (blob) {
-                    const file = new File([blob], 'pasted-image.jpg', { type: blob.type });
-                    handleFiles([file]);
-                }
-            }, 'image/jpeg', 0.9);
-        };
-
-        img.onerror = function() {
-            alert('Failed to load image from URL: ' + url +
-                  '\n\nThis might be due to CORS restrictions or the URL not being a direct image.');
-        };
-
-        img.src = url;
-    }
-
-    function handleFiles(files) {
-        if (!fileInput) return;
-        const dt = new DataTransfer();
-        for (let i = 0; i < files.length; i++) {
-            dt.items.add(files[i]);
-        }
-
-        fileInput.files = dt.files;
-
-        const event = new Event('change', { bubbles: true });
-        fileInput.dispatchEvent(event);
-    }
+			if (!isOtherInput) {
+				e.preventDefault();
+				const imageUrlField = document.getElementById('imageUrl');
+				if (imageUrlField) {
+					imageUrlField.value = pastedData;
+					loadFromUrl();
+				}
+			}
+		}
+	});
 });
 
 setResolution();
@@ -324,6 +262,15 @@ function setUrlStatus(el, cls, text) {
 	el.textContent = text;
 }
 
+function setLoadProgress(fraction) {
+	var el = document.getElementById('progress');
+	if (!el) return;
+	if (fraction == null) { el.innerHTML = ''; return; }
+	var pct = Math.round(Math.max(0, Math.min(1, fraction)) * 100);
+	if (!el.firstElementChild) el.innerHTML = '<div class="progress-bar"><div class="progress-bar-fill"></div></div>';
+	el.firstElementChild.firstElementChild.style.width = pct + '%';
+}
+
 
 async function fetchRemoteBlob(url) {
 	var sources = [
@@ -405,13 +352,45 @@ function handleFileSelect(evt) {
 						var gif = new SuperGif( {gif: img, auto_play: false});
 						gif.load_raw(new Uint8Array(e.target.result), function (el) {
 							document.body.style.cursor = "auto";
-							updateHighestResolution(gif.get_hdr().width, gif.get_hdr().height,gif.get_frames().length); 
+							setLoadProgress(null);
+							updateHighestResolution(gif.get_hdr().width, gif.get_hdr().height,gif.get_frames().length);
 							handleClipImport(gif.get_frames().length, false, function (options){
-								handleGifLoad(gif, frames[0],options); 
-								updateHighestResolution(gif.get_hdr().width, gif.get_hdr().height,frameCount); 
+								handleGifLoad(gif, frames[0],options);
+								updateHighestResolution(gif.get_hdr().width, gif.get_hdr().height,frameCount);
 								onPropertyChange();
 								closeClipImport();
-							});
+							}, gif.get_frames(), function (f) { return gifRawFrameCanvas(gif, f); });
+						});
+					}
+					else if (this.fileType == "image/webp" && i == 0){
+						frameCount = 0;
+						var webpBuffer = e.target.result;
+						decodeAnimatedWebp(webpBuffer, setLoadProgress).then(function (decoded) {
+							setLoadProgress(null);
+							if (decoded) {
+								updateHighestResolution(decoded.width, decoded.height, decoded.frames.length);
+								handleClipImport(decoded.frames.length, false, function (options){
+									handleAnimFrames(decoded.frames, function (f) { return f.canvas; }, function (f) { return f.delayCs; }, frames[0], options);
+									updateHighestResolution(decoded.width, decoded.height, frameCount);
+									onPropertyChange();
+									closeClipImport();
+								}, decoded.frames, function (f) { return f.canvas; });
+								document.body.style.cursor = "auto";
+							}
+							else {
+								// Not animated, or this browser can't decode WebP frame-by-frame: fall back to a static image.
+								frameCount = 1;
+								var webpImg = new Image();
+								webpImg.onload = function () {
+									imagesLoaded += 1;
+									frames[0].push(webpImg);
+									updateHighestResolution(webpImg.width, webpImg.height, frameCount);
+									check();
+									createCanvas();
+									document.body.style.cursor = "auto";
+								};
+								webpImg.src = URL.createObjectURL(new Blob([webpBuffer], { type: 'image/webp' }));
+							}
 						});
 					}
 					else if (this.fileType == "image/x-tga" || this.fileType == "image/targa"){
@@ -420,12 +399,14 @@ function handleFileSelect(evt) {
 						if (singleImageAnim)
 							frameCount = tga.header.height / height;
 						imagesLoaded += 1;
+						setLoadProgress(imagesLoaded / frameCount);
 						frames[0].push(tga.getCanvas());
 						if (imagesLoaded == frameCount) {
 							updateHighestResolution(tga.header.width, tga.header.height,frameCount);
 							check();
 							createCanvas();
 							document.body.style.cursor = "auto";
+							setLoadProgress(null);
 						}
 					}
 					else {
@@ -435,12 +416,14 @@ function handleFileSelect(evt) {
 							if (singleImageAnim)
 								frameCount = img.height / height;
 							imagesLoaded += 1;
+							setLoadProgress(imagesLoaded / frameCount);
 							frames[0].push(img);
 							if (imagesLoaded == frameCount) {
 								updateHighestResolution(img.width, img.height,frameCount);
 								check();
 								createCanvas();
 								document.body.style.cursor = "auto";
+								setLoadProgress(null);
 							}
 						}
 					}
@@ -448,10 +431,10 @@ function handleFileSelect(evt) {
 						onPropertyChange();
 					})
 				});
-			
-			if (files[i].type == "image/gif" || files[i].type == "image/x-tga" || files[i].type == "image/targa"){
+
+			if (files[i].type == "image/gif" || files[i].type == "image/x-tga" || files[i].type == "image/targa" || files[i].type == "image/webp"){
 				reader.readAsArrayBuffer(files[i]);
-				if (files[i].type == "image/gif")
+				if (files[i].type == "image/gif" || files[i].type == "image/webp")
 					break;
 			}
 			else
@@ -623,7 +606,7 @@ function changeMipmap(evt,mipmapNumber) { // this code, it scares me
 						gif.load_raw(new Uint8Array(e.target.result), function (el) {
 							handleClipImport(gif.get_frames().length, false, function (options){
 								handleGifLoad(gif, frames[mipmapNumber],options); loadMipmaps(mipmapNumber, cwidth, cheight); closeClipImport();
-							});
+							}, gif.get_frames(), function (f) { return gifRawFrameCanvas(gif, f); });
 						});
 					}
 					else if (this.fileType == "image/x-tga"  || this.fileType == "image/targa"){
@@ -971,18 +954,25 @@ function getHue(red, green, blue){
 	return hue;
 }
 
-function handleGifLoad(gif, cframes,options) {
+// Shared frame-budgeting/timing loop used by both GIF and animated WebP import.
+// rawFrames: source frames in decode order. getCanvas(rawFrame)/getDelay(rawFrame)
+// adapt each source's frame representation; options.excludeFrames (a Set of raw
+// frame indices) lets the frame picker drop frames before the timing pass runs.
+function handleAnimFrames(rawFrames, getCanvas, getDelay, cframes, options) {
 	singleImageAnim = false;
 	var time = 0;
 	var frametime = options.frametime * 100;
+	var excludeFrames = options.excludeFrames;
 
 	var cancelPressed = false;
 	for (var j = options.start; j < options.end; j++){
-		var canvas = document.createElement('canvas');
-		canvas.width = gif.get_hdr().width;
-		canvas.height = gif.get_hdr().height;
-		canvas.getContext('2d').putImageData(gif.get_frames()[j].data,0,0);
-		var am = Math.ceil((time + gif.get_frames()[j].delay) / frametime) - Math.ceil(time  / frametime);
+		var delay = getDelay(rawFrames[j]);
+		if (excludeFrames && excludeFrames.has(j)) {
+			time += delay;
+			continue;
+		}
+		var canvas = getCanvas(rawFrames[j]);
+		var am = Math.ceil((time + delay) / frametime) - Math.ceil(time  / frametime);
 		if (options.allFrames)
 			am = 1;
 		for (var k = 0; k < am; k++){
@@ -1004,8 +994,58 @@ function handleGifLoad(gif, cframes,options) {
 				return;
 			cframes.push(canvas);
 		}
-		time += gif.get_frames()[j].delay;
+		time += delay;
 	}
+}
+
+function gifRawFrameCanvas(gif, rawFrame) {
+	var canvas = document.createElement('canvas');
+	canvas.width = gif.get_hdr().width;
+	canvas.height = gif.get_hdr().height;
+	canvas.getContext('2d').putImageData(rawFrame.data, 0, 0);
+	return canvas;
+}
+
+function handleGifLoad(gif, cframes, options) {
+	handleAnimFrames(gif.get_frames(), function (f) { return gifRawFrameCanvas(gif, f); }, function (f) { return f.delay; }, cframes, options);
+}
+
+// Decodes an animated WebP into individual frame canvases using the native
+// WebCodecs ImageDecoder (Chromium). Returns null if the browser can't decode
+// WebP this way, or the file isn't actually animated (single frame).
+async function decodeAnimatedWebp(arrayBuffer, onProgress) {
+	if (typeof ImageDecoder === 'undefined')
+		return null;
+	var decoder;
+	try {
+		decoder = new ImageDecoder({ data: arrayBuffer, type: 'image/webp' });
+		await decoder.tracks.ready;
+	} catch (e) {
+		return null;
+	}
+	var track = decoder.tracks.selectedTrack;
+	if (!track || !track.animated || track.frameCount <= 1) {
+		decoder.close();
+		return null;
+	}
+	var frameCount = track.frameCount;
+	var rawFrames = [];
+	for (var i = 0; i < frameCount; i++) {
+		var result = await decoder.decode({ frameIndex: i });
+		var vf = result.image;
+		var canvas = document.createElement('canvas');
+		canvas.width = vf.displayWidth || vf.codedWidth;
+		canvas.height = vf.displayHeight || vf.codedHeight;
+		canvas.getContext('2d').drawImage(vf, 0, 0);
+		// VideoFrame.duration is in microseconds; GIF-style delay math (handleAnimFrames)
+		// works in centiseconds, so convert here and default to 100ms if unset.
+		var delayCs = vf.duration ? vf.duration / 10000 : 10;
+		vf.close();
+		rawFrames.push({ canvas: canvas, delayCs: delayCs });
+		if (onProgress) onProgress((i + 1) / frameCount);
+	}
+	decoder.close();
+	return { width: rawFrames[0].canvas.width, height: rawFrames[0].canvas.height, frames: rawFrames };
 }
 
 function handleVideoLoadPre(file, onLoad) {
@@ -1082,7 +1122,7 @@ function handleVideoLoad(video, cframes, options, onprogress) {
 	return video;
 }
 
-function handleClipImport(length, usetime, clipAccept) {
+function handleClipImport(length, usetime, clipAccept, rawFrames, getCanvas) {
 	document.getElementById("videoImporterAccept").disabled=false;
 	document.getElementById("main").style.display="none";
 	document.getElementById("videoImporter").style.display="block";
@@ -1104,6 +1144,10 @@ function handleClipImport(length, usetime, clipAccept) {
 	}
 	document.getElementById("fpsIn").value=1;
 	onImportClipAccept = clipAccept;
+	if (rawFrames && getCanvas)
+		populateFramePicker(rawFrames, getCanvas);
+	else
+		clearFramePicker();
 }
 
 function clipImport() {
@@ -1113,13 +1157,69 @@ function clipImport() {
 	options.end=parseFloat(document.getElementById("endTimeIn").value);
 	options.frametime=parseFloat(document.getElementById("fpsIn").value)/5;
 	options.allFrames=document.getElementById("allFramesIn").checked;
+	options.excludeFrames=framePickerExcluded;
 	onImportClipAccept(options);
-	
+
 }
 
 function closeClipImport(){
 	document.getElementById("main").style.display="grid";
 	document.getElementById("videoImporter").style.display="none";
+	clearFramePicker();
+}
+
+var framePickerExcluded = null;
+
+// ponytail: renders one <canvas> thumbnail per frame, no virtualization —
+// fine up to a few hundred frames. Skip the picker above that so we don't
+// stall the modal building thousands of DOM nodes; add windowing if needed.
+var FRAME_PICKER_MAX = 300;
+
+function populateFramePicker(rawFrames, getCanvas) {
+	framePickerExcluded = new Set();
+	var el = document.getElementById('framePicker');
+	var hint = document.getElementById('framePickerHint');
+	if (!el) return;
+	el.innerHTML = '';
+	if (rawFrames.length > FRAME_PICKER_MAX) {
+		el.classList.remove('active');
+		if (hint) hint.style.display = 'none';
+		return;
+	}
+	el.classList.add('active');
+	if (hint) hint.style.display = 'block';
+	rawFrames.forEach(function (rf, idx) {
+		var src = getCanvas(rf);
+		var thumb = document.createElement('div');
+		thumb.className = 'frame-thumb';
+		var mini = document.createElement('canvas');
+		mini.width = 44;
+		mini.height = 44;
+		var scale = Math.min(44 / src.width, 44 / src.height);
+		mini.getContext('2d').drawImage(src, 22 - src.width * scale / 2, 22 - src.height * scale / 2, src.width * scale, src.height * scale);
+		thumb.appendChild(mini);
+		thumb.onclick = function () {
+			if (framePickerExcluded.has(idx)) {
+				framePickerExcluded.delete(idx);
+				thumb.classList.remove('excluded');
+			} else {
+				framePickerExcluded.add(idx);
+				thumb.classList.add('excluded');
+			}
+		};
+		el.appendChild(thumb);
+	});
+}
+
+function clearFramePicker() {
+	framePickerExcluded = null;
+	var el = document.getElementById('framePicker');
+	if (el) {
+		el.innerHTML = '';
+		el.classList.remove('active');
+	}
+	var hint = document.getElementById('framePickerHint');
+	if (hint) hint.style.display = 'none';
 }
 
 function reduceVideoSize(options,video){

@@ -5,6 +5,8 @@ var I18N = {
 		preview: "Preview",
 		source: "Source",
 		localFile: "Local file",
+		dropHint: "Drag & drop a file here",
+		dropHintSub: "or click to browse",
 		orUrl: "…or paste an image / GIF / video URL",
 		urlPlaceholder: "Paste an image URL…",
 		load: "Load",
@@ -60,13 +62,16 @@ var I18N = {
 		startTime: "Start time (seconds):",
 		endTime: "End time (seconds):",
 		importAll: "Import all frames",
-		confirmFrames: "The remaining frames are skipped as they would exceed the frame limit. Press Cancel to preserve all frames."
+		confirmFrames: "The remaining frames are skipped as they would exceed the frame limit. Press Cancel to preserve all frames.",
+		framePickerHint: "Click a frame to exclude it from the export."
 	},
 	zh: {
 		tagline: "將圖片、GIF 與影片轉換成任何 Source 引擎遊戲可用的噴漆。",
 		preview: "預覽",
 		source: "來源",
 		localFile: "本機檔案",
+		dropHint: "將檔案拖曳到此處",
+		dropHintSub: "或點擊以瀏覽檔案",
 		orUrl: "…或貼上圖片 / GIF / 影片網址",
 		urlPlaceholder: "請輸入圖片網址…",
 		load: "載入",
@@ -121,7 +126,8 @@ var I18N = {
 		startTime: "起始時間（秒）：",
 		endTime: "結束時間（秒）：",
 		importAll: "匯入所有影格",
-		confirmFrames: "其餘影格因超過影格上限而被略過。按「取消」可保留所有影格。"
+		confirmFrames: "其餘影格因超過影格上限而被略過。按「取消」可保留所有影格。",
+		framePickerHint: "點擊影格可將其從匯出中排除。"
 	}
 };
 
